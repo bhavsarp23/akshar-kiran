@@ -13,6 +13,23 @@ from lxml import etree as et
 #       Classes      #
 #--------------------#
 
+class OutputThread(Thread):
+  def __init__(self, event):
+    Thread.__init__(self)
+    self.stopped = event
+    self.updated = False
+    self.refresh_rate = 0.025
+
+  def updateFrame(self, frame):
+    self.frame = frame
+    self.updated = True
+
+  def run(self):
+    while not self.stopped.wait(self.refresh_rate):
+      if self.updated:
+        print(self.frame)
+        self.updated = False
+
 class Message:
 
   __startByte = 0x7E
@@ -74,6 +91,11 @@ class Universe:
     groupElements = root.findall('group')
     for element in groupElements:
       self.groups.append(Group(element))
+      
+  def __startThread(self):
+    self.stopFlag = Event()
+    self.thread = OutputThread(self.stopFlag)
+    self.thread.start()
 
   # Constructor
   def __init__(self, port='dev/ttyUSB0'):
@@ -81,10 +103,12 @@ class Universe:
     self.__openSerialPort()
     self.__getFixtures()
     self.__getGroups()
+    self.__startThread()
 
   # Write frame to serial port
   def render(self):
     self.ser.write(self.frame.tolist())
+    self.thread.updateFrame(self.frame)
     print(Message(self.frame).getBinary())
 
   # Set the value of a single channel
